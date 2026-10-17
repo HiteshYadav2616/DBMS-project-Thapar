@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -74,47 +74,44 @@ def create_schedule(
 
 @router.get("/schedules", response_model=list[ScheduleSearchResponse])
 def search_schedules(
-    source_city: str = Query(min_length=1),
-    destination_city: str = Query(min_length=1),
+    source: str = Query(min_length=1),
+    destination: str = Query(min_length=1),
     travel_date: date | None = None,
     database: Session = Depends(get_db),
 ) -> list[ScheduleSearchResponse]:
     query = (
         select(
             Schedule,
-            Route.source_city,
-            Route.destination_city,
+            Route.source,
+            Route.destination,
             Bus.bus_number,
-            Bus.operator_name,
             Bus.bus_type,
         )
         .join(Route, Schedule.route_id == Route.route_id)
         .join(Bus, Schedule.bus_id == Bus.bus_id)
         .where(
-            Route.source_city == source_city,
-            Route.destination_city == destination_city,
+            Route.source == source,
+            Route.destination == destination,
         )
     )
     if travel_date is not None:
-        day_start = datetime.combine(travel_date, time.min)
-        query = query.where(Schedule.departure_time >= day_start)
-        query = query.where(Schedule.departure_time < day_start + timedelta(days=1))
-    rows = database.execute(query.order_by(Schedule.departure_time)).all()
+        query = query.where(Schedule.travel_date == travel_date)
+    rows = database.execute(query.order_by(Schedule.travel_date, Schedule.departure_time)).all()
     return [
         ScheduleSearchResponse(
             schedule_id=schedule.schedule_id,
             bus_id=schedule.bus_id,
             route_id=schedule.route_id,
+            travel_date=schedule.travel_date,
             departure_time=schedule.departure_time,
             arrival_time=schedule.arrival_time,
-            base_fare=schedule.base_fare,
-            source_city=route_source,
-            destination_city=route_destination,
+            fare=schedule.fare,
+            source=route_source,
+            destination=route_destination,
             bus_number=bus_number,
-            operator_name=operator_name,
             bus_type=bus_type,
         )
-        for schedule, route_source, route_destination, bus_number, operator_name, bus_type in rows
+        for schedule, route_source, route_destination, bus_number, bus_type in rows
     ]
 
 
@@ -135,7 +132,7 @@ def get_seat_availability(schedule_id: int, database: Session = Depends(get_db))
             select(BookingSeat.seat_id)
             .join(Booking, Booking.booking_id == BookingSeat.booking_id)
             .where(
-                BookingSeat.schedule_id == schedule_id,
+                Booking.schedule_id == schedule_id,
                 Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
             )
         ).all()

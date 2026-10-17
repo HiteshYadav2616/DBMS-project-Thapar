@@ -18,8 +18,9 @@ def register(payload: UserCreate, database: Session = Depends(get_db)) -> User:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists.")
 
     user = User(
-        full_name=payload.full_name.strip(),
+        name=payload.name.strip(),
         email=str(payload.email).lower(),
+        phone=payload.phone,
         password_hash=hash_password(payload.password),
         role=UserRole.USER,
     )

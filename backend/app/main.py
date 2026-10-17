@@ -1,27 +1,12 @@
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import models
-from app.db.base import Base
 from app.db.session import engine
 from app.routers import auth, bookings, catalog
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    Base.metadata.create_all(bind=engine)
-    yield
-
-
-app = FastAPI(
-    title="Bus Travel Booking System API",
-    version="1.0.0",
-    lifespan=lifespan,
-)
+app = FastAPI(title="Bus Travel Booking System API", version="1.0.0")
 
 app.include_router(auth.router)
 app.include_router(catalog.router)

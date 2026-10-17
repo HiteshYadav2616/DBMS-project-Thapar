@@ -1,5 +1,3 @@
-import secrets
-import string
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -21,11 +19,6 @@ from app.schemas import BookingCreate, BookingResponse, BookingSeatResponse, Boo
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-def new_booking_reference() -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(12))
-
-
 @router.post("", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 def create_booking(
     payload: BookingCreate,
@@ -37,8 +30,9 @@ def create_booking(
     )
     if schedule is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule was not found.")
+    departure_datetime = datetime.combine(schedule.travel_date, schedule.departure_time)
     now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-    if schedule.departure_time <= now_utc:
+    if departure_datetime <= now_utc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This schedule has already departed.")
 
     seats = database.scalars(
@@ -55,7 +49,7 @@ def create_booking(
             select(BookingSeat.seat_id)
             .join(Booking, Booking.booking_id == BookingSeat.booking_id)
             .where(
-                BookingSeat.schedule_id == schedule.schedule_id,
+                Booking.schedule_id == schedule.schedule_id,
                 BookingSeat.seat_id.in_(payload.seat_ids),
                 Booking.status.in_([BookingStatus.PENDING, BookingStatus.CONFIRMED]),
             )
@@ -68,9 +62,8 @@ def create_booking(
             detail={"message": "One or more seats are no longer available.", "seat_ids": sorted(occupied)},
         )
 
-    total_amount = schedule.base_fare * len(seats)
+    total_amount = schedule.fare * len(seats)
     booking = Booking(
-        booking_reference=new_booking_reference(),
         user_id=current_user.user_id,
         schedule_id=schedule.schedule_id,
         status=BookingStatus.CONFIRMED,
@@ -82,9 +75,8 @@ def create_booking(
         [
             BookingSeat(
                 booking_id=booking.booking_id,
-                schedule_id=schedule.schedule_id,
                 seat_id=seat.seat_id,
-                ticket_price=schedule.base_fare,
+                ticket_price=schedule.fare,
             )
             for seat in seats
         ]
@@ -93,7 +85,7 @@ def create_booking(
         Payment(
             booking_id=booking.booking_id,
             amount=total_amount,
-            payment_status=PaymentStatus.SUCCESS,
+            payment_status=PaymentStatus.SUCCESSFUL,
         )
     )
     database.flush()
@@ -161,9 +153,9 @@ def _load_booking(database: Session, booking_id: int, user_id: int) -> BookingRe
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Booking payment record is missing.")
     return BookingResponse(
         booking_id=booking.booking_id,
-        booking_reference=booking.booking_reference,
         user_id=booking.user_id,
         schedule_id=booking.schedule_id,
+        booking_date=booking.booking_date,
         status=booking.status,
         total_amount=booking.total_amount,
         seats=[

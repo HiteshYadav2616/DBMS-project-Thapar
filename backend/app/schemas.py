@@ -1,14 +1,15 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import BookingStatus, BusType, PaymentStatus, UserRole
+from app.models import BookingStatus, PaymentStatus, UserRole
 
 
 class UserCreate(BaseModel):
-    full_name: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=100)
     email: EmailStr
+    phone: str | None = Field(default=None, max_length=15)
     password: str = Field(min_length=8, max_length=128)
 
 
@@ -26,15 +27,15 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: int
-    full_name: str
+    name: str
     email: EmailStr
+    phone: str | None
     role: UserRole
 
 
 class BusCreate(BaseModel):
     bus_number: str = Field(min_length=1, max_length=30)
-    operator_name: str = Field(min_length=1, max_length=120)
-    bus_type: BusType
+    bus_type: str | None = Field(default=None, max_length=50)
     total_seats: int = Field(gt=0, le=300)
 
 
@@ -43,42 +44,45 @@ class BusResponse(BaseModel):
 
     bus_id: int
     bus_number: str
-    operator_name: str
-    bus_type: BusType
+    bus_type: str | None
     total_seats: int
 
 
 class RouteCreate(BaseModel):
-    source_city: str = Field(min_length=1, max_length=120)
-    destination_city: str = Field(min_length=1, max_length=120)
-    distance_km: Decimal = Field(gt=0, max_digits=8, decimal_places=2)
+    source: str = Field(min_length=1, max_length=100)
+    destination: str = Field(min_length=1, max_length=100)
+    distance: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
+
+    @model_validator(mode="after")
+    def locations_must_differ(self) -> "RouteCreate":
+        if self.source == self.destination:
+            raise ValueError("source and destination must differ")
+        return self
 
 
 class RouteResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     route_id: int
-    source_city: str
-    destination_city: str
-    distance_km: Decimal
+    source: str
+    destination: str
+    distance: Decimal | None
 
 
 class ScheduleCreate(BaseModel):
     bus_id: int = Field(gt=0)
     route_id: int = Field(gt=0)
-    departure_time: datetime
-    arrival_time: datetime
-    base_fare: Decimal = Field(ge=0, max_digits=10, decimal_places=2)
+    travel_date: date
+    departure_time: time
+    arrival_time: time
+    fare: Decimal = Field(ge=0, max_digits=10, decimal_places=2)
 
-    @model_validator(mode="after")
-    def arrival_after_departure(self) -> "ScheduleCreate":
-        if self.departure_time.tzinfo is not None:
-            self.departure_time = self.departure_time.astimezone(timezone.utc).replace(tzinfo=None)
-        if self.arrival_time.tzinfo is not None:
-            self.arrival_time = self.arrival_time.astimezone(timezone.utc).replace(tzinfo=None)
-        if self.arrival_time <= self.departure_time:
-            raise ValueError("arrival_time must be after departure_time")
-        return self
+    @field_validator("departure_time", "arrival_time")
+    @classmethod
+    def schedule_times_are_utc_naive(cls, value: time) -> time:
+        if value.tzinfo is not None:
+            raise ValueError("schedule times must not include a timezone")
+        return value
 
 
 class ScheduleResponse(BaseModel):
@@ -87,9 +91,10 @@ class ScheduleResponse(BaseModel):
     schedule_id: int
     bus_id: int
     route_id: int
-    departure_time: datetime
-    arrival_time: datetime
-    base_fare: Decimal
+    travel_date: date
+    departure_time: time
+    arrival_time: time
+    fare: Decimal
 
 
 class SeatAvailability(BaseModel):
@@ -121,6 +126,7 @@ class PaymentResponse(BaseModel):
 
     payment_id: int
     amount: Decimal
+    payment_method: str | None
     payment_status: PaymentStatus
 
 
@@ -128,9 +134,9 @@ class BookingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     booking_id: int
-    booking_reference: str
     user_id: int
     schedule_id: int
+    booking_date: datetime
     status: BookingStatus
     total_amount: Decimal
     seats: list[BookingSeatResponse]
@@ -141,15 +147,14 @@ class BookingSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     booking_id: int
-    booking_reference: str
     schedule_id: int
+    booking_date: datetime
     status: BookingStatus
     total_amount: Decimal
 
 
 class ScheduleSearchResponse(ScheduleResponse):
-    source_city: str
-    destination_city: str
+    source: str
+    destination: str
     bus_number: str
-    operator_name: str
-    bus_type: BusType
+    bus_type: str | None

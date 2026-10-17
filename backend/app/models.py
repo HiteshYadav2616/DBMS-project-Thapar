@@ -1,19 +1,19 @@
-from datetime import datetime
+from datetime import date, time, datetime
 from decimal import Decimal
 from enum import Enum
 
 from sqlalchemy import (
-    BigInteger,
-    CHAR,
     CheckConstraint,
+    Date,
     DateTime,
     Enum as SqlEnum,
     ForeignKey,
     Integer,
     Numeric,
-    SmallInteger,
     String,
+    Time,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,140 +25,166 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 
-class BusType(str, Enum):
-    AC_SEATER = "ac_seater"
-    NON_AC_SEATER = "non_ac_seater"
-    AC_SLEEPER = "ac_sleeper"
-    NON_AC_SLEEPER = "non_ac_sleeper"
-
-
 class BookingStatus(str, Enum):
-    PENDING = "pending"
-    CONFIRMED = "confirmed"
-    CANCELLED = "cancelled"
+    PENDING = "Pending"
+    CONFIRMED = "Confirmed"
+    CANCELLED = "Cancelled"
 
 
 class PaymentStatus(str, Enum):
-    PENDING = "pending"
-    SUCCESS = "success"
-    FAILED = "failed"
+    PENDING = "Pending"
+    SUCCESSFUL = "Successful"
+    FAILED = "Failed"
+    REFUNDED = "Refunded"
 
 
 def enum_values(enum_type: type[Enum]) -> list[str]:
     return [item.value for item in enum_type]
 
 
-BIGINT_ID = BigInteger().with_variant(Integer, "sqlite")
+def varchar_enum(enum_type: type[Enum], name: str, length: int) -> SqlEnum:
+    return SqlEnum(
+        enum_type,
+        name=name,
+        values_callable=enum_values,
+        native_enum=False,
+        create_constraint=False,
+        length=length,
+    )
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "Users"
 
-    user_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(15))
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SqlEnum(UserRole, name="user_role", values_callable=enum_values),
+        varchar_enum(UserRole, "user_role", 20),
         default=UserRole.USER,
+        server_default=UserRole.USER.value,
         nullable=False,
     )
 
 
 class Bus(Base):
-    __tablename__ = "buses"
-    __table_args__ = (CheckConstraint("total_seats > 0", name="ck_buses_total_seats_positive"),)
+    __tablename__ = "Buses"
 
-    bus_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
+    bus_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     bus_number: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
-    operator_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    bus_type: Mapped[BusType] = mapped_column(
-        SqlEnum(BusType, name="bus_type", values_callable=enum_values),
-        nullable=False,
-    )
-    total_seats: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    bus_type: Mapped[str | None] = mapped_column(String(50))
+    total_seats: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class Route(Base):
-    __tablename__ = "routes"
+    __tablename__ = "Routes"
     __table_args__ = (
-        CheckConstraint("distance_km > 0", name="ck_routes_distance_positive"),
+        CheckConstraint("distance IS NULL OR distance >= 0", name="ck_routes_distance_nonnegative"),
+        CheckConstraint("source <> destination", name="ck_routes_source_destination_different"),
     )
 
-    route_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    source_city: Mapped[str] = mapped_column(String(120), nullable=False)
-    destination_city: Mapped[str] = mapped_column(String(120), nullable=False)
-    distance_km: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+    route_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(100), nullable=False)
+    destination: Mapped[str] = mapped_column(String(100), nullable=False)
+    distance: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
 
 
 class Schedule(Base):
-    __tablename__ = "schedules"
-    __table_args__ = (
-        CheckConstraint("arrival_time > departure_time", name="ck_schedules_arrival_after_departure"),
-        CheckConstraint("base_fare >= 0", name="ck_schedules_base_fare_nonnegative"),
-    )
+    __tablename__ = "Schedules"
+    __table_args__ = (CheckConstraint("fare >= 0", name="ck_schedules_fare_nonnegative"),)
 
-    schedule_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    bus_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("buses.bus_id"), nullable=False, index=True)
-    route_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("routes.route_id"), nullable=False, index=True)
-    departure_time: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
-    arrival_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    base_fare: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    schedule_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bus_id: Mapped[int] = mapped_column(Integer, ForeignKey("Buses.bus_id"), nullable=False)
+    route_id: Mapped[int] = mapped_column(Integer, ForeignKey("Routes.route_id"), nullable=False)
+    travel_date: Mapped[date] = mapped_column(Date, nullable=False)
+    departure_time: Mapped[time] = mapped_column(Time, nullable=False)
+    arrival_time: Mapped[time] = mapped_column(Time, nullable=False)
+    fare: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
 
 
 class Seat(Base):
-    __tablename__ = "seats"
-    __table_args__ = (
-        UniqueConstraint("bus_id", "seat_number", name="uq_seats_bus_seat_number"),
-    )
+    __tablename__ = "Seats"
+    __table_args__ = (UniqueConstraint("bus_id", "seat_number", name="uq_seats_bus_seat_number"),)
 
-    seat_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    bus_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("buses.bus_id"), nullable=False, index=True)
+    seat_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bus_id: Mapped[int] = mapped_column(Integer, ForeignKey("Buses.bus_id"), nullable=False)
     seat_number: Mapped[str] = mapped_column(String(10), nullable=False)
 
 
 class Booking(Base):
-    __tablename__ = "bookings"
+    __tablename__ = "Bookings"
+    __table_args__ = (
+        CheckConstraint("total_amount >= 0", name="ck_bookings_total_amount_nonnegative"),
+        CheckConstraint(
+            "status IN ('Pending', 'Confirmed', 'Cancelled')",
+            name="ck_bookings_status",
+        ),
+    )
 
-    booking_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    booking_reference: Mapped[str] = mapped_column(CHAR(12), unique=True, nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("users.user_id"), nullable=False, index=True)
-    schedule_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("schedules.schedule_id"), nullable=False, index=True)
+    booking_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("Users.user_id"), nullable=False)
+    schedule_id: Mapped[int] = mapped_column(Integer, ForeignKey("Schedules.schedule_id"), nullable=False)
+    booking_date: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+    total_amount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+        default=Decimal("0"),
+        server_default="0",
+    )
     status: Mapped[BookingStatus] = mapped_column(
-        SqlEnum(BookingStatus, name="booking_status", values_callable=enum_values),
+        varchar_enum(BookingStatus, "booking_status", 20),
         default=BookingStatus.PENDING,
+        server_default=BookingStatus.PENDING.value,
         nullable=False,
     )
-    total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     seats: Mapped[list["BookingSeat"]] = relationship(back_populates="booking")
     payments: Mapped[list["Payment"]] = relationship(back_populates="booking")
 
 
 class BookingSeat(Base):
-    __tablename__ = "booking_seats"
+    __tablename__ = "Booking_Seats"
     __table_args__ = (
-        UniqueConstraint("booking_id", "seat_id", name="uq_booking_seats_booking_seat"),
         CheckConstraint("ticket_price >= 0", name="ck_booking_seats_ticket_price_nonnegative"),
     )
 
-    booking_seat_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    booking_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("bookings.booking_id"), nullable=False, index=True)
-    schedule_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("schedules.schedule_id"), nullable=False, index=True)
-    seat_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("seats.seat_id"), nullable=False, index=True)
+    booking_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("Bookings.booking_id"),
+        primary_key=True,
+    )
+    seat_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("Seats.seat_id"),
+        primary_key=True,
+    )
     ticket_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     booking: Mapped[Booking] = relationship(back_populates="seats")
 
 
 class Payment(Base):
-    __tablename__ = "payments"
-    __table_args__ = (CheckConstraint("amount >= 0", name="ck_payments_amount_nonnegative"),)
+    __tablename__ = "Payments"
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="ck_payments_amount_nonnegative"),
+        CheckConstraint(
+            "payment_status IN ('Pending', 'Successful', 'Failed', 'Refunded')",
+            name="ck_payments_status",
+        ),
+    )
 
-    payment_id: Mapped[int] = mapped_column(BIGINT_ID, primary_key=True, autoincrement=True)
-    booking_id: Mapped[int] = mapped_column(BIGINT_ID, ForeignKey("bookings.booking_id"), nullable=False, index=True)
+    payment_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    booking_id: Mapped[int] = mapped_column(Integer, ForeignKey("Bookings.booking_id"), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    payment_method: Mapped[str | None] = mapped_column(String(30))
     payment_status: Mapped[PaymentStatus] = mapped_column(
-        SqlEnum(PaymentStatus, name="payment_status", values_callable=enum_values),
+        varchar_enum(PaymentStatus, "payment_status", 20),
         default=PaymentStatus.PENDING,
+        server_default=PaymentStatus.PENDING.value,
         nullable=False,
     )
     booking: Mapped[Booking] = relationship(back_populates="payments")
