@@ -1,0 +1,32 @@
+.bookings-page .empty-state { text-align: center; padding: 80px 20px; }
+.bookings-page .empty-icon { font-size: 3.5rem; margin-bottom: 16px; opacity: 0.6; }
+.bookings-page .empty-state p { color: var(--text-muted); font-size: 1.05rem; }
+
+.loading-spinner { display: flex; justify-content: center; padding: 60px 0; }
+.spinner {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 4px solid rgba(108,60,224,0.2); border-top-color: var(--primary-light);
+  animation: spin 0.8s linear infinite;
+}
+
+.booking-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px 28px;
+  margin-bottom: 16px; display: flex; align-items: center;
+  justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  transition: border-color var(--transition), box-shadow var(--transition); cursor: pointer;
+}
+.booking-card:hover { border-color: var(--primary-light); box-shadow: var(--shadow-glow); }
+.booking-left { flex: 1; }
+.booking-id { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
+.booking-schedule-info { font-size: 1rem; font-weight: 600; }
+.booking-date { font-size: 0.85rem; color: var(--text-secondary); margin-top: 4px; }
+.booking-right { text-align: right; }
+.booking-amount { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+.status-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600; margin-top: 6px;
+}
+.status-Confirmed { background: rgba(34,197,94,0.15); color: var(--success); }
+.status-Pending { background: rgba(245,158,11,0.15); color: var(--warning); }
+.status-Cancelled { background: rgba(239,68,68,0.15); color: var(--danger); }

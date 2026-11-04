@@ -1,0 +1,17 @@
+.admin-page .empty-state { text-align: center; padding: 80px 20px; }
+.admin-page .empty-icon { font-size: 3.5rem; margin-bottom: 16px; opacity: 0.6; }
+.admin-page .empty-state p { color: var(--text-muted); font-size: 1.05rem; }
+
+.admin-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 10px 22px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-secondary); font-weight: 600; font-size: 0.9rem;
+  cursor: pointer; transition: all var(--transition);
+}
+.tab-btn:hover { border-color: var(--primary-light); color: var(--text-primary); }
+.tab-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+.admin-form { padding: 32px; max-width: 560px; }
+.admin-form h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 24px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
